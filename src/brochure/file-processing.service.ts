@@ -1,7 +1,8 @@
 /* eslint-disable prettier/prettier */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Injectable } from '@nestjs/common';
 import * as fs from 'fs';
-// import * as sharp from 'sharp';
+import * as sharp from 'sharp';
 import * as pdfParse from 'pdf-parse';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -32,6 +33,8 @@ export class FileProcessingService {
       },
     };
 
+    console.log(`Processing file: ${file.originalname}, type: ${file.mimetype}`);
+
     if (file.mimetype === 'application/pdf') {
       return this.extractFromPdf(file, content);
     } else if (file.mimetype.startsWith('image/')) {
@@ -46,15 +49,14 @@ export class FileProcessingService {
     content: ExtractedContent,
   ): Promise<ExtractedContent> {
     const buffer = fs.readFileSync(file.path);
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
     const data = await pdfParse(buffer);
     
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     content.text = data.text;
+    console.log(`Extracted text length: ${content.text.length}`);
     
-    // For PDF, we'll treat the entire document as one image for Gemini processing
-    // In a real implementation, you might want to use a library like pdf2pic
-    // eslint-disable-next-line @typescript-eslint/await-thenable
+    // Convert PDF to image for visual analysis
     const pdfAsImage = await this.convertPdfToImage(buffer);
     if (pdfAsImage) {
       content.images.push({
@@ -62,32 +64,51 @@ export class FileProcessingService {
         base64: pdfAsImage,
         format: 'png',
       });
+      console.log(`PDF converted to image successfully`);
+    } else {
+      console.log(`PDF to image conversion failed, sending raw PDF data`);
+      // Send the PDF as binary data to Gemini
+      const pdfBase64 = buffer.toString('base64');
+      content.images.push({
+        id: uuidv4(),
+        base64: pdfBase64,
+        format: 'pdf',
+      });
     }
 
+    console.log(`Total images extracted: ${content.images.length}`);
     return content;
   }
 
-  // eslint-disable-next-line @typescript-eslint/require-await
   private async extractFromImage(
     file: Express.Multer.File,
     content: ExtractedContent,
   ): Promise<ExtractedContent> {
     const buffer = fs.readFileSync(file.path);
-    const base64 = buffer.toString('base64');
+    
+    // Process image with Sharp to ensure it's in a supported format
+    const processedBuffer = await sharp(buffer)
+      .jpeg({ quality: 90 })
+      .toBuffer();
+    
+    const base64 = processedBuffer.toString('base64');
     
     content.images.push({
       id: uuidv4(),
       base64,
-      format: file.mimetype.split('/')[1],
+      format: 'jpeg',
     });
 
+    console.log(`Image processed successfully, size: ${processedBuffer.length} bytes`);
     return content;
   }
 
-  private convertPdfToImage(buffer: Buffer): string | null {
+  // eslint-disable-next-line @typescript-eslint/require-await
+  private async convertPdfToImage(buffer: Buffer): Promise<string | null> {
     try {
-      // This is a simplified approach - in production, use pdf2pic or similar
-      // For now, we'll return null and rely on text extraction
+      // For now, we'll return null and let Gemini handle the PDF directly
+      // In production, you might want to use pdf2pic or similar
+      // npm install pdf2pic
       return null;
     } catch (error) {
       console.error('PDF to image conversion failed:', error);

@@ -41,9 +41,6 @@ export class ExtractedImageDto {
 }
 
 export class BrochureAnalysisDto {
-  @ApiProperty()
-  extractedText: string;
-
   @ApiProperty({ type: [ExtractedImageDto] })
   images: ExtractedImageDto[];
 
@@ -54,7 +51,7 @@ export class BrochureAnalysisDto {
   propertyType: string;
 
   @ApiProperty()
-  summary: string;
+  report: string;
 
   @ApiProperty()
   processingTime: number;
